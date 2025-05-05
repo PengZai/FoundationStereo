@@ -28,13 +28,10 @@ if __name__=="__main__":
   parser.add_argument('--out_dir', default="/root/catkin_ws/src/modules_vins/examples/FoundationStereo/apple-left-small", type=str, help='the directory to save results')
   parser.add_argument('--scale', default=1, type=float, help='downsize the image by scale, must be <=1')
   parser.add_argument('--hiera', default=0, type=int, help='hierarchical inference (only needed for high-resolution images (>1K))')
-  parser.add_argument('--z_far', default=1000, type=float, help='max depth to clip in point cloud')
-  parser.add_argument('--valid_iters', type=int, default=12, help='number of flow-field updates during forward pass')
+  parser.add_argument('--valid_iters', type=int, default=32, help='number of flow-field updates during forward pass')
   parser.add_argument('--get_pc', type=int, default=1, help='save point cloud output')
   parser.add_argument('--remove_invisible', default=1, type=int, help='remove non-overlapping observations between left and right images from point cloud, so the remaining points are more reliable')
-  parser.add_argument('--denoise_cloud', type=int, default=1, help='whether to denoise the point cloud')
-  parser.add_argument('--denoise_nb_points', type=int, default=30, help='number of points to consider for radius outlier removal')
-  parser.add_argument('--denoise_radius', type=float, default=0.03, help='radius to use for outlier removal')
+
   args = parser.parse_args()
 
   set_logging_format()
@@ -76,77 +73,14 @@ if __name__=="__main__":
   img1 = torch.as_tensor(img1).cuda().float()[None].permute(0,3,1,2)
   padder = InputPadder(img0.shape, divis_by=32, force_square=False)
   img0, img1 = padder.pad(img0, img1)
-
+  
   with torch.cuda.amp.autocast(True):
     if not args.hiera:
-      disp = model.forward(img0, img1, iters=args.valid_iters, test_mode=True)
-    else:
-      disp = model.run_hierachical(img0, img1, iters=args.valid_iters, test_mode=True, small_ratio=0.5)
-  disp = padder.unpad(disp.float())
-  disp = disp.data.cpu().numpy().reshape(H,W)
-  # vis = vis_disparity(disp)
-  # vis = np.concatenate([img0_ori, vis], axis=1)
-  # imageio.imwrite(f'{args.out_dir}/vis.png', vis)
-  # logging.info(f"Output saved to {args.out_dir}")
-
-  vis = disp.copy()
-  vis = (vis - vis.min()) / (vis.max() - vis.min()) * 255.0
-  vis = vis.astype(np.uint8).squeeze()
-
-  cmap = matplotlib.colormaps.get_cmap('Spectral_r')
-
-  vis = (cmap(vis)[:, :, :3] * 255)[:, :, ::-1].astype(np.uint8)
-
-  cv2.imwrite(os.path.join(args.out_dir, "disparity.png"), vis)
+      disp = model(img0, img1)
+      traced_script_module = torch.jit.trace(model, [img0, img1])
+      traced_script_module.save(ckpt_dir+".traced.pt")
 
 
-  if args.remove_invisible:
-    yy,xx = np.meshgrid(np.arange(disp.shape[0]), np.arange(disp.shape[1]), indexing='ij')
-    us_right = xx-disp
-    invalid = us_right<0
-    disp[invalid] = np.inf
 
-  if args.get_pc:
-    with open(args.intrinsic_file, 'r') as f:
-      lines = f.readlines()
-      K = np.array(list(map(float, lines[0].rstrip().split()))).astype(np.float32).reshape(3,3)
-      baseline = float(lines[1])
-    K[:2] *= scale
-    depth = K[0,0]*baseline/disp
 
-    cmap_depth = depth.copy()
-    cmap_depth[cmap_depth > 100] = 0
-    cmap_depth[cmap_depth < 0] = 0
-    sorted_list_depth = sorted(cmap_depth.flatten().tolist(), reverse=True)
-    cmap_depth = (cmap_depth - cmap_depth.min()) / (cmap_depth.max() - cmap_depth.min()) * 255.0
-    cmap_depth = cmap_depth.astype(np.uint8).squeeze()
-
-    cmap_depth = (cmap(cmap_depth)[:, :, :3] * 255)[:, :, ::-1].astype(np.uint8)
-
-    cv2.imwrite(os.path.join(args.out_dir, "depth2.png"), cmap_depth)
-
-    np.save(f'{args.out_dir}/depth_meter.npy', depth)
-    xyz_map = depth2xyzmap(depth, K)
-    pcd = toOpen3dCloud(xyz_map.reshape(-1,3), img0_ori.reshape(-1,3))
-    keep_mask = (np.asarray(pcd.points)[:,2]>0) & (np.asarray(pcd.points)[:,2]<=args.z_far)
-    keep_ids = np.arange(len(np.asarray(pcd.points)))[keep_mask]
-    pcd = pcd.select_by_index(keep_ids)
-    o3d.io.write_point_cloud(f'{args.out_dir}/cloud.ply', pcd)
-    logging.info(f"PCL saved to {args.out_dir}")
-
-    if args.denoise_cloud:
-      logging.info("[Optional step] denoise point cloud...")
-      cl, ind = pcd.remove_radius_outlier(nb_points=args.denoise_nb_points, radius=args.denoise_radius)
-      inlier_cloud = pcd.select_by_index(ind)
-      o3d.io.write_point_cloud(f'{args.out_dir}/cloud_denoise.ply', inlier_cloud)
-      pcd = inlier_cloud
-
-    logging.info("Visualizing point cloud. Press ESC to exit.")
-    vis = o3d.visualization.Visualizer()
-    vis.create_window()
-    vis.add_geometry(pcd)
-    vis.get_render_option().point_size = 1.0
-    vis.get_render_option().background_color = np.array([0.5, 0.5, 0.5])
-    vis.run()
-    vis.destroy_window()
-
+  
