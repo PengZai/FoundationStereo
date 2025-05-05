@@ -14,19 +14,21 @@ from omegaconf import OmegaConf
 from core.utils.utils import InputPadder
 from Utils import *
 from core.foundation_stereo import *
-
+import matplotlib
+import cv2
 
 if __name__=="__main__":
   code_dir = os.path.dirname(os.path.realpath(__file__))
   parser = argparse.ArgumentParser()
-  parser.add_argument('--left_file', default="f'{code_dir}/../assets/left.png'", type=str)
-  parser.add_argument('--right_file', default=f'{code_dir}/../assets/right.png', type=str)
-  parser.add_argument('--intrinsic_file', default=f'{code_dir}/../assets/K.txt', type=str, help='camera intrinsic matrix and baseline file')
-  parser.add_argument('--ckpt_dir', default=f'{code_dir}/../pretrained_models/23-51-11/model_best_bp2.pth', type=str, help='pretrained model path')
-  parser.add_argument('--out_dir', default=f'{code_dir}/../output/', type=str, help='the directory to save results')
+  parser.add_argument('--left_file', default="/root/catkin_ws/src/modules_vins/examples/FoundationStereo/apple-left.png", type=str)
+  parser.add_argument('--right_file', default="/root/catkin_ws/src/modules_vins/examples/FoundationStereo/apple-right.png", type=str)
+  parser.add_argument('--intrinsic_file', default=f'{code_dir}/../assets/K_apple_zed.txt', type=str, help='camera intrinsic matrix and baseline file')
+  # parser.add_argument('--ckpt_dir', default=f'{code_dir}/../pretrained_models/23-51-11/model_best_bp2.pth', type=str, help='pretrained model path')
+  parser.add_argument('--ckpt_dir', default=f'{code_dir}/../pretrained_models/11-33-40/model_best_bp2.pth', type=str, help='pretrained model path')
+  parser.add_argument('--out_dir', default="/root/catkin_ws/src/modules_vins/examples/FoundationStereo/apple-left-small", type=str, help='the directory to save results')
   parser.add_argument('--scale', default=1, type=float, help='downsize the image by scale, must be <=1')
   parser.add_argument('--hiera', default=0, type=int, help='hierarchical inference (only needed for high-resolution images (>1K))')
-  parser.add_argument('--z_far', default=10, type=float, help='max depth to clip in point cloud')
+  parser.add_argument('--z_far', default=1000, type=float, help='max depth to clip in point cloud')
   parser.add_argument('--valid_iters', type=int, default=32, help='number of flow-field updates during forward pass')
   parser.add_argument('--get_pc', type=int, default=1, help='save point cloud output')
   parser.add_argument('--remove_invisible', default=1, type=int, help='remove non-overlapping observations between left and right images from point cloud, so the remaining points are more reliable')
@@ -82,10 +84,21 @@ if __name__=="__main__":
       disp = model.run_hierachical(img0, img1, iters=args.valid_iters, test_mode=True, small_ratio=0.5)
   disp = padder.unpad(disp.float())
   disp = disp.data.cpu().numpy().reshape(H,W)
-  vis = vis_disparity(disp)
-  vis = np.concatenate([img0_ori, vis], axis=1)
-  imageio.imwrite(f'{args.out_dir}/vis.png', vis)
-  logging.info(f"Output saved to {args.out_dir}")
+  # vis = vis_disparity(disp)
+  # vis = np.concatenate([img0_ori, vis], axis=1)
+  # imageio.imwrite(f'{args.out_dir}/vis.png', vis)
+  # logging.info(f"Output saved to {args.out_dir}")
+
+  vis = disp.copy()
+  vis = (vis - vis.min()) / (vis.max() - vis.min()) * 255.0
+  vis = vis.astype(np.uint8).squeeze()
+
+  cmap = matplotlib.colormaps.get_cmap('Spectral_r')
+
+  vis = (cmap(vis)[:, :, :3] * 255)[:, :, ::-1].astype(np.uint8)
+
+  cv2.imwrite(os.path.join(args.out_dir, "disparity.png"), vis)
+
 
   if args.remove_invisible:
     yy,xx = np.meshgrid(np.arange(disp.shape[0]), np.arange(disp.shape[1]), indexing='ij')
@@ -100,6 +113,18 @@ if __name__=="__main__":
       baseline = float(lines[1])
     K[:2] *= scale
     depth = K[0,0]*baseline/disp
+
+    cmap_depth = depth.copy()
+    cmap_depth[cmap_depth > 100] = 0
+    cmap_depth[cmap_depth < 0] = 0
+    sorted_list_depth = sorted(cmap_depth.flatten().tolist(), reverse=True)
+    cmap_depth = (cmap_depth - cmap_depth.min()) / (cmap_depth.max() - cmap_depth.min()) * 255.0
+    cmap_depth = cmap_depth.astype(np.uint8).squeeze()
+
+    cmap_depth = (cmap(cmap_depth)[:, :, :3] * 255)[:, :, ::-1].astype(np.uint8)
+
+    cv2.imwrite(os.path.join(args.out_dir, "depth2.png"), cmap_depth)
+
     np.save(f'{args.out_dir}/depth_meter.npy', depth)
     xyz_map = depth2xyzmap(depth, K)
     pcd = toOpen3dCloud(xyz_map.reshape(-1,3), img0_ori.reshape(-1,3))
