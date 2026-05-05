@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 
 [project]
-name = "foundation_stereo"
+name = "foundation-stereo"
 version = "0.0.1"
 description = "FoundationStereo: Zero-Shot Stereo Matching"
 readme = "readme.md"
