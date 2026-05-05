@@ -12,10 +12,10 @@ license = { file = "LICENSE" }
 requires-python = ">=3.9"
 
 dependencies = [
-    "torch==2.4.1",
-    "torchvision==0.19.1",
-    "torchaudio==2.4.1",
-    "xformers==0.0.28.post1",
+    # CUDA 12.8 builds; install with:
+    #   pip install -e . --extra-index-url https://download.pytorch.org/whl/cu128
+    "torch==2.10.0+cu128",
+    "torchvision==0.25.0+cu128",
     "numpy",
     "scikit-image",
     "omegaconf",
@@ -41,6 +41,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# xformers must match the installed torch version. dinov2 layers fall back to
+# non-xformers paths when it's missing, so it's optional. Set XFORMERS_DISABLED=1
+# to force the fallback path even when xformers is installed.
+xformers = ["xformers"]
 # flash-attn must be built against the installed torch and CUDA toolkit;
 # install separately with: pip install flash-attn --no-build-isolation
 flash-attn = ["flash-attn"]
