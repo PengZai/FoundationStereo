@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=64.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "foundation_stereo"
+version = "0.0.1"
+description = "FoundationStereo: Zero-Shot Stereo Matching"
+readme = "readme.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+
+dependencies = [
+    "torch==2.4.1",
+    "torchvision==0.19.1",
+    "torchaudio==2.4.1",
+    "xformers==0.0.28.post1",
+    "numpy",
+    "scikit-image",
+    "omegaconf",
+    "opencv-contrib-python",
+    "imgaug",
+    "ninja",
+    "timm",
+    "albumentations",
+    "matplotlib",
+    "pandas",
+    "scipy",
+    "joblib",
+    "scikit-learn",
+    "ruamel.yaml",
+    "trimesh",
+    "pyyaml",
+    "imageio",
+    "open3d",
+    "transformations",
+    "einops",
+    "gdown",
+    "huggingface-hub",
+]
+
+[project.optional-dependencies]
+# flash-attn must be built against the installed torch and CUDA toolkit;
+# install separately with: pip install flash-attn --no-build-isolation
+flash-attn = ["flash-attn"]
+
+
+[tool.setuptools]
+py-modules = ["Utils"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "depth_anything*", "dinov2*"]
+exclude = ["assets*", "docker*", "scripts*", "teaser*"]

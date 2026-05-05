@@ -16,7 +16,10 @@ from torch import einsum
 code_dir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(f'{code_dir}/../')
 from Utils import *
-from flash_attn import flash_attn_func
+try:
+    from flash_attn import flash_attn_func
+except ImportError:
+    flash_attn_func = None
 
 
 def _is_contiguous(tensor: torch.Tensor) -> bool:

@@ -151,11 +151,19 @@ class DPT_DINOv2(nn.Module):
 
         assert encoder in ['vits', 'vitb', 'vitl']
 
-        # in case the Internet connection is not stable, please load the DINOv2 locally
-        # if localhub:
-        #     self.pretrained = torch.hub.load('torchhub/facebookresearch_dinov2_main', 'dinov2_{:}14'.format(encoder), source='local', pretrained=False)
-        # else:
-        self.pretrained = torch.hub.load('facebookresearch/dinov2', 'dinov2_{:}14'.format(encoder), pretrained=pretrained_dino)
+        # Load DINOv2 directly from the bundled `dinov2/` package to avoid the
+        # torch.hub cache (its hubconf imports `dinov2.hub.dinotxt`, which the
+        # bundled older copy does not provide and would shadow at import time).
+        from dinov2.hub.backbones import (
+            dinov2_vitb14, dinov2_vitg14, dinov2_vitl14, dinov2_vits14,
+        )
+        _dinov2_factory = {
+            "vits": dinov2_vits14,
+            "vitb": dinov2_vitb14,
+            "vitl": dinov2_vitl14,
+            "vitg": dinov2_vitg14,
+        }
+        self.pretrained = _dinov2_factory[encoder](pretrained=pretrained_dino)
 
 
         dim = self.pretrained.blocks[0].attn.qkv.in_features
